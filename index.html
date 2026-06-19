@@ -1,0 +1,1529 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  GitFork, 
+  BookOpen, 
+  Compass, 
+  Sparkles, 
+  Upload, 
+  User, 
+  Users, 
+  Heart, 
+  Calendar, 
+  Plus, 
+  Edit, 
+  Trash, 
+  MapPin, 
+  Globe, 
+  Search, 
+  Book,
+  Check,
+  Share2,
+  Layers,
+  HeartHandshake,
+  HelpCircle,
+  Camera,
+  RotateCcw,
+  Fingerprint
+} from 'lucide-react';
+
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore
+} from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "mock-api-key",
+  authDomain: "mock-app.firebaseapp.com",
+  projectId: "mock-app",
+  storageBucket: "mock-app.appspot.com",
+  messagingSenderId: "12345678",
+  appId: "1:12345678:web:abc123xyz"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const initialFamilyNodes = [
+  {
+    id: 'g2-kakek-kandung',
+    name: 'Raden Mas Haryo Kusumo',
+    gender: 'Laki-laki',
+    birthDate: '1915-08-17',
+    deathDate: '1998-11-12',
+    birthPlace: 'Yogyakarta',
+    bio: 'Pencinta karawitan klasik dan pejuang kemerdekaan tangguh. Kakek kandung dari pihak Ayah.',
+    avatar: '',
+    generation: 2, 
+    relationCategory: 'Kandung',
+    role: 'Kakek Kandung'
+  },
+  {
+    id: 'g2-kakek-angkat',
+    name: 'Johannes Silva',
+    gender: 'Laki-laki',
+    birthDate: '1920-02-10',
+    deathDate: '2001-05-14',
+    birthPlace: 'Dili, Timor-Leste',
+    bio: 'Kakek angkat berdarah campuran Portugis yang membimbing keluarga kami di masa transisi kolonial.',
+    avatar: '',
+    generation: 2, 
+    relationCategory: 'Angkat',
+    role: 'Kakek Angkat'
+  },
+  {
+    id: 'g1-ayah',
+    name: 'Bambang Kusumo',
+    gender: 'Laki-laki',
+    birthDate: '1952-10-05',
+    deathDate: '',
+    birthPlace: 'Yogyakarta',
+    bio: 'Insinyur sipil pencinta sastra lama dan piringan hitam klasik.',
+    avatar: '',
+    generation: 1,
+    fatherId: 'g2-kakek-kandung',
+    adoptiveFatherId: 'g2-kakek-angkat',
+    relationCategory: 'Kandung',
+    role: 'Ayah'
+  },
+  {
+    id: 'g1-ibu-kandung',
+    name: 'Riana Kartini',
+    gender: 'Perempuan',
+    birthDate: '1958-12-25',
+    deathDate: '',
+    birthPlace: 'Bandung',
+    bio: 'Guru bahasa yang selalu mengajari pentingnya menjaga dokumentasi dan tutur sejarah keluarga.',
+    avatar: '',
+    generation: 1,
+    relationCategory: 'Kandung',
+    role: 'Ibu Kandung'
+  },
+  {
+    id: 'g1-ibu-angkat',
+    name: 'Maria Helena Pires',
+    gender: 'Perempuan',
+    birthDate: '1960-04-18',
+    deathDate: '',
+    birthPlace: 'Dili, Timor-Leste',
+    bio: 'Ibu angkat penyayang yang mengasuh kami dengan penuh kelembutan budi pekerti.',
+    avatar: '',
+    generation: 1,
+    relationCategory: 'Angkat',
+    role: 'Ibu Angkat'
+  },
+  {
+    id: 'g0-self',
+    name: 'Andi Kusumo (Saya)',
+    gender: 'Laki-laki',
+    birthDate: '1988-06-15',
+    deathDate: '',
+    birthPlace: 'Jakarta',
+    bio: 'Inisiator utama pembuatan silsilah digital keluarga Livro da Família ini.',
+    avatar: '',
+    generation: 0,
+    fatherId: 'g1-ayah',
+    motherId: 'g1-ibu-kandung',
+    adoptiveMotherId: 'g1-ibu-angkat',
+    relationCategory: 'Kandung',
+    role: 'Saya'
+  }
+];
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('tree'); 
+  const [familyNodes, setFamilyNodes] = useState([]);
+  const [stories, setStories] = useState([]);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isAddingRelation, setIsAddingRelation] = useState(false);
+  const [relationType, setRelationType] = useState(''); 
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null });
+
+  const [nodeForm, setNodeForm] = useState({
+    name: '',
+    gender: 'Laki-laki',
+    birthDate: '',
+    deathDate: '',
+    birthPlace: '',
+    bio: '',
+    avatar: '',
+    generation: 0,
+    fatherId: '',
+    motherId: '',
+    adoptiveFatherId: '',
+    adoptiveMotherId: '',
+    relationCategory: 'Kandung',
+    role: ''
+  });
+
+  const [storyForm, setStoryForm] = useState({
+    title: '',
+    date: '',
+    author: '',
+    content: '',
+    image: ''
+  });
+
+  const [simulatedMatches, setSimulatedMatches] = useState([
+    {
+      id: 1,
+      country: 'Timor-Leste & Portugal',
+      code: 'TL/PT',
+      familyBranch: 'Arsip Pires & Silva (Dili/Lisbon)',
+      matchPercentage: 96,
+      ancestorName: 'Johannes Silva (Lahir 1920)',
+      description: 'Ditemukan kecocokan catatan adopsi dan perkawinan klan Silva yang bermigrasi dari Dili ke Portugal tahun 1975.',
+      status: 'Belum Terhubung'
+    },
+    {
+      id: 2,
+      country: 'Belanda (Netherlands)',
+      code: 'NL',
+      familyBranch: 'Marga Prawironegoro (Arsip Leiden)',
+      matchPercentage: 91,
+      ancestorName: 'Adipati Prawironegoro (Lahir 1845)',
+      description: 'Kecocokan silsilah kolonial Hindia Belanda cabang Yogyakarta dan Solo.',
+      status: 'Belum Terhubung'
+    }
+  ]);
+
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (err) {
+        console.warn("Auth mode dialihkan ke penyimpanan lokal.");
+        showToast("Menjalankan aplikasi dalam mode luring lokal.");
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (usr) => {
+      if (usr) setUser(usr);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const localNodes = localStorage.getItem('livro_nodes');
+    const localStories = localStorage.getItem('livro_stories');
+
+    if (localNodes) {
+      const parsed = JSON.parse(localNodes);
+      setFamilyNodes(parsed);
+      const selfNode = parsed.find(n => n.id === 'g0-self') || parsed[0];
+      setSelectedNode(selfNode);
+    } else {
+      setFamilyNodes(initialFamilyNodes);
+      setSelectedNode(initialFamilyNodes[5]);
+      localStorage.setItem('livro_nodes', JSON.stringify(initialFamilyNodes));
+    }
+
+    if (localStories) {
+      setStories(JSON.parse(localStories));
+    } else {
+      const demoStories = [
+        {
+          id: 'story-1',
+          title: 'Kisah Perjuangan Kakek di Yogyakarta',
+          date: '1945-08-17',
+          author: 'Andi Kusumo',
+          content: 'Kakek Raden Mas Haryo Kusumo ikut serta dalam mengawal kemerdekaan dan selalu mengajarkan kami untuk mencintai seni karawitan Jawa yang luhur.',
+          image: ''
+        }
+      ];
+      setStories(demoStories);
+      localStorage.setItem('livro_stories', JSON.stringify(demoStories));
+    }
+  }, []);
+
+  const saveNodesToStorage = (newNodes) => {
+    setFamilyNodes(newNodes);
+    localStorage.setItem('livro_nodes', JSON.stringify(newNodes));
+  };
+
+  const saveStoriesToStorage = (newStories) => {
+    setStories(newStories);
+    localStorage.setItem('livro_stories', JSON.stringify(newStories));
+  };
+
+  const handleImageChange = (e, targetForm) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (targetForm === 'node') {
+          setNodeForm({ ...nodeForm, avatar: reader.result });
+        } else {
+          setStoryForm({ ...storyForm, image: reader.result });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveNode = (e) => {
+    e.preventDefault();
+    const newNodes = [...familyNodes];
+
+    if (isAddingRelation) {
+      const newId = `node-${Date.now()}`;
+      const newNode = {
+        ...nodeForm,
+        id: newId
+      };
+
+      const parentNodeIndex = newNodes.findIndex(n => n.id === selectedNode.id);
+      if (parentNodeIndex !== -1) {
+        if (relationType === 'father') {
+          if (nodeForm.relationCategory === 'Angkat') {
+            newNodes[parentNodeIndex].adoptiveFatherId = newId;
+          } else {
+            newNodes[parentNodeIndex].fatherId = newId;
+          }
+        } else if (relationType === 'mother') {
+          if (nodeForm.relationCategory === 'Angkat') {
+            newNodes[parentNodeIndex].adoptiveMotherId = newId;
+          } else {
+            newNodes[parentNodeIndex].motherId = newId;
+          }
+        } else if (relationType === 'spouse') {
+          newNode.spouseId = selectedNode.id;
+          newNodes[parentNodeIndex].spouseId = newId;
+        } else if (relationType === 'child') {
+          if (selectedNode.gender === 'Laki-laki') {
+            if (nodeForm.relationCategory === 'Angkat') {
+              newNode.adoptiveFatherId = selectedNode.id;
+            } else {
+              newNode.fatherId = selectedNode.id;
+            }
+          } else {
+            if (nodeForm.relationCategory === 'Angkat') {
+              newNode.adoptiveMotherId = selectedNode.id;
+            } else {
+              newNode.motherId = selectedNode.id;
+            }
+          }
+        }
+      }
+
+      newNodes.push(newNode);
+      saveNodesToStorage(newNodes);
+      setSelectedNode(newNode);
+      showToast(`Berhasil menambahkan ${nodeForm.role}: ${nodeForm.name}`);
+    } else {
+      const nodeIndex = newNodes.findIndex(n => n.id === selectedNode.id);
+      if (nodeIndex !== -1) {
+        newNodes[nodeIndex] = {
+          ...selectedNode,
+          name: nodeForm.name,
+          gender: nodeForm.gender,
+          birthDate: nodeForm.birthDate,
+          deathDate: nodeForm.deathDate,
+          birthPlace: nodeForm.birthPlace,
+          bio: nodeForm.bio,
+          avatar: nodeForm.avatar,
+          relationCategory: nodeForm.relationCategory,
+          role: nodeForm.role
+        };
+        saveNodesToStorage(newNodes);
+        setSelectedNode(newNodes[nodeIndex]);
+        showToast(`Profil ${nodeForm.name} berhasil diperbarui.`);
+      }
+    }
+
+    setIsEditing(false);
+    setIsAddingRelation(false);
+  };
+
+  const startEditNode = (node) => {
+    setNodeForm({
+      name: node.name || '',
+      gender: node.gender || 'Laki-laki',
+      birthDate: node.birthDate || '',
+      deathDate: node.deathDate || '',
+      birthPlace: node.birthPlace || '',
+      bio: node.bio || '',
+      avatar: node.avatar || '',
+      generation: node.generation || 0,
+      fatherId: node.fatherId || '',
+      motherId: node.motherId || '',
+      adoptiveFatherId: node.adoptiveFatherId || '',
+      adoptiveMotherId: node.adoptiveMotherId || '',
+      relationCategory: node.relationCategory || 'Kandung',
+      role: node.role || ''
+    });
+    setIsEditing(true);
+    setIsAddingRelation(false);
+  };
+
+  const startAddRelation = (type) => {
+    setRelationType(type);
+    let gen = selectedNode.generation;
+    let autoRole = '';
+    
+    if (type === 'father') {
+      gen = selectedNode.generation + 1;
+      autoRole = 'Ayah';
+    } else if (type === 'mother') {
+      gen = selectedNode.generation + 1;
+      autoRole = 'Ibu';
+    } else if (type === 'spouse') {
+      gen = selectedNode.generation;
+      autoRole = selectedNode.gender === 'Laki-laki' ? 'Istri' : 'Suami';
+    } else if (type === 'child') {
+      gen = selectedNode.generation - 1;
+      autoRole = 'Anak';
+    }
+
+    setNodeForm({
+      name: '',
+      gender: (type === 'father' ? 'Laki-laki' : type === 'mother' ? 'Perempuan' : 'Laki-laki'),
+      birthDate: '',
+      deathDate: '',
+      birthPlace: '',
+      bio: '',
+      avatar: '',
+      generation: gen,
+      fatherId: '',
+      motherId: '',
+      adoptiveFatherId: '',
+      adoptiveMotherId: '',
+      relationCategory: 'Kandung',
+      role: autoRole
+    });
+    setIsAddingRelation(true);
+    setIsEditing(false);
+  };
+
+  const handleDeleteNode = (nodeId) => {
+    setConfirmModal({
+      show: true,
+      title: 'Hapus Anggota Keluarga',
+      message: 'Apakah Anda yakin ingin menghapus profil ini dari Livro da Família? Hubungan garis silsilah orang ini akan dilepaskan secara permanen.',
+      onConfirm: () => {
+        const newNodes = familyNodes.filter(n => n.id !== nodeId);
+        const cleanedNodes = newNodes.map(node => {
+          const updated = { ...node };
+          if (updated.fatherId === nodeId) updated.fatherId = '';
+          if (updated.motherId === nodeId) updated.motherId = '';
+          if (updated.adoptiveFatherId === nodeId) updated.adoptiveFatherId = '';
+          if (updated.adoptiveMotherId === nodeId) updated.adoptiveMotherId = '';
+          if (updated.spouseId === nodeId) updated.spouseId = '';
+          return updated;
+        });
+
+        saveNodesToStorage(cleanedNodes);
+        setSelectedNode(cleanedNodes.find(n => n.id === 'g0-self') || cleanedNodes[0] || null);
+        showToast("Anggota keluarga berhasil dihapus.");
+        setConfirmModal({ show: false, title: '', message: '', onConfirm: null });
+      }
+    });
+  };
+
+  const handleWipeAllData = () => {
+    setConfirmModal({
+      show: true,
+      title: 'Hapus Total & Mulai Baru',
+      message: 'Apakah Anda ingin mengosongkan seluruh data silsilah contoh sekarang? Tindakan ini akan menyisakan satu profil utama diri Anda untuk menulis ulang sejarah keluarga kandung maupun angkat Anda.',
+      onConfirm: () => {
+        const selfNode = {
+          id: 'g0-self',
+          name: 'Saya (Akar Silsilah Baru)',
+          gender: 'Laki-laki',
+          birthDate: '',
+          deathDate: '',
+          birthPlace: '',
+          bio: 'Gunakan tombol Edit Profil di sebelah kanan untuk memperbarui identitas asli Anda, lalu mulailah menambahkan ayah, ibu kandung, atau angkat Anda!',
+          avatar: '',
+          generation: 0,
+          relationCategory: 'Kandung',
+          role: 'Saya'
+        };
+        saveNodesToStorage([selfNode]);
+        setSelectedNode(selfNode);
+        saveStoriesToStorage([]);
+        showToast("Seluruh data contoh dibersihkan. Silsilah Anda siap ditulis!");
+        setConfirmModal({ show: false, title: '', message: '', onConfirm: null });
+      }
+    });
+  };
+
+  const handleSaveStory = (e) => {
+    e.preventDefault();
+    if (!storyForm.title || !storyForm.content) {
+      showToast("Harap isi judul dan isi cerita!");
+      return;
+    }
+
+    const newStories = [
+      {
+        id: `story-${Date.now()}`,
+        ...storyForm,
+        date: storyForm.date || new Date().toISOString().split('T')[0]
+      },
+      ...stories
+    ];
+
+    saveStoriesToStorage(newStories);
+    setStoryForm({ title: '', date: '', author: '', content: '', image: '' });
+    showToast("Jurnal kenangan berhasil diabadikan.");
+  };
+
+  const connectGlobalMatch = (id, familyBranch) => {
+    setSimulatedMatches(prev => 
+      prev.map(match => 
+        match.id === id ? { ...match, status: 'Menghubungkan...' } : match
+      )
+    );
+
+    setTimeout(() => {
+      setSimulatedMatches(prev => 
+        prev.map(match => 
+          match.id === id ? { ...match, status: 'Terhubung' } : match
+        )
+      );
+      showToast(`Silsilah Anda berhasil terintegrasi dengan klan ${familyBranch}!`);
+    }, 2500);
+  };
+
+  const filteredNodes = familyNodes.filter(node => 
+    node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (node.role && node.role.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (node.birthPlace && node.birthPlace.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const generations = {
+    greatGrandparents: familyNodes.filter(n => n.generation === 3),
+    grandparents: familyNodes.filter(n => n.generation === 2),
+    parents: familyNodes.filter(n => n.generation === 1),
+    selfSiblings: familyNodes.filter(n => n.generation === 0),
+    children: familyNodes.filter(n => n.generation === -1),
+  };
+
+  const RenderAvatarPlaceholder = () => (
+    <div className="w-full h-full flex items-center justify-center bg-[#E5ECE8] text-[#244f38]">
+      <User className="h-5 w-5" />
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F2F6F3] text-[#1D2B22] font-sans selection:bg-[#CFE2D6] selection:text-[#112519]">
+      
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-[#162D21] text-[#F4F8F5] border border-[#B5945B] px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 transition-all">
+          <Sparkles className="h-5 w-5 text-[#B5945B]" />
+          <span className="text-xs font-semibold tracking-wide">{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Custom Dialog Modal */}
+      {confirmModal.show && (
+        <div className="fixed inset-0 z-50 bg-[#112319]/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-2xl border border-[#D0DFD5] p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-[#162D21] flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-[#B5945B]" />
+              {confirmModal.title}
+            </h3>
+            <p className="text-xs text-[#485E50] leading-relaxed">
+              {confirmModal.message}
+            </p>
+            <div className="flex gap-2 justify-end pt-2">
+              <button 
+                onClick={confirmModal.onConfirm}
+                className="bg-[#D24B4B] hover:bg-[#B73535] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-sm"
+              >
+                Ya, Lanjutkan
+              </button>
+              <button 
+                onClick={() => setConfirmModal({ show: false, title: '', message: '', onConfirm: null })}
+                className="bg-[#EDF2EE] hover:bg-[#DCE6DE] text-[#162D21] text-xs font-bold px-4 py-2.5 rounded-xl transition border border-[#D0DFD5]"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header Panel with Perfect Layout Alignment */}
+      <header className="border-b border-[#D0DFD5] bg-white shadow-sm relative overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-[#1E432F] via-[#B5945B] to-[#1E432F]" />
+        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col lg:flex-row justify-between items-center gap-6">
+          <div className="text-center lg:text-left">
+            <div className="flex items-center justify-center lg:justify-start gap-2">
+              <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-[#1E432F] bg-[#E2ECE5] px-2.5 py-0.5 rounded">
+                REGISTO DE MEMÓRIA CLÁSSICA
+              </span>
+            </div>
+            <h1 className="text-4xl font-extrabold text-[#112319] tracking-tight flex items-center justify-center lg:justify-start gap-3 mt-1 font-serif">
+              Livro da Família
+              <span className="text-lg font-light text-[#43644F] italic hidden md:inline">| Memorial Tracker</span>
+            </h1>
+            <p className="text-xs text-[#485E50] mt-1.5 italic font-medium">
+              "Melacak pertalian darah kandung dan angkat, memelihara keluhuran warisan pusaka masa lampau."
+            </p>
+          </div>
+
+          {/* Tab Selection Pill - Redesigned to be perfectly aligned */}
+          <div className="flex flex-row items-center bg-[#E2ECE5] p-1.5 rounded-xl border border-[#D0DFD5] shadow-inner gap-1 w-full lg:w-auto justify-center overflow-x-auto whitespace-nowrap scrollbar-none">
+            <button 
+              onClick={() => setActiveTab('tree')}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 h-10 ${
+                activeTab === 'tree' 
+                  ? 'bg-[#1E432F] text-white shadow-md' 
+                  : 'text-[#3E5C48] hover:text-[#112319] hover:bg-white/40'
+              }`}
+            >
+              <GitFork className="h-3.5 w-3.5 flex-shrink-0" />
+              Bagan Silsilah Klasik
+            </button>
+            <button 
+              onClick={() => { setActiveTab('book'); setIsEditing(false); setIsAddingRelation(false); }}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 h-10 ${
+                activeTab === 'book' 
+                  ? 'bg-[#1E432F] text-white shadow-md' 
+                  : 'text-[#3E5C48] hover:text-[#112319] hover:bg-white/40'
+              }`}
+            >
+              <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
+              Buku Kenangan ({stories.length})
+            </button>
+            <button 
+              onClick={() => { setActiveTab('global'); setIsEditing(false); setIsAddingRelation(false); }}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 h-10 relative ${
+                activeTab === 'global' 
+                  ? 'bg-[#1E432F] text-white shadow-md' 
+                  : 'text-[#3E5C48] hover:text-[#112319] hover:bg-white/40'
+              }`}
+            >
+              <Compass className="h-3.5 w-3.5 flex-shrink-0" />
+              Radar Global TL/PT
+              <span className="absolute top-1 right-2 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#B5945B] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#B5945B]"></span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Content Body */}
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        
+        {/* ================= TAB 1: TREE GRAPH ================= */}
+        {activeTab === 'tree' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* Left Sidebar */}
+            <div className="lg:col-span-4 space-y-6">
+              
+              {/* Reset Data Admin Button */}
+              <div className="bg-white p-5 rounded-2xl border border-[#D0DFD5] shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#1E432F]" />
+                <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-[#1E432F]" />
+                  Kelola Data Livro
+                </h3>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={handleWipeAllData}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-[#FDF1F1] hover:bg-[#FBE4E4] border border-[#ECD2D2] text-[#B73535] text-[11px] font-bold py-2 px-3 rounded-xl transition"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Reset Data Contoh
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setSelectedNode({
+                        id: `node-${Date.now()}`,
+                        name: '',
+                        gender: 'Laki-laki',
+                        birthDate: '',
+                        deathDate: '',
+                        birthPlace: '',
+                        bio: '',
+                        avatar: '',
+                        generation: 0,
+                        relationCategory: 'Kandung',
+                        role: 'Keluarga Baru'
+                      });
+                      setIsAddingRelation(true);
+                      setIsEditing(false);
+                      setNodeForm({
+                        name: '',
+                        gender: 'Laki-laki',
+                        birthDate: '',
+                        deathDate: '',
+                        birthPlace: '',
+                        bio: '',
+                        avatar: '',
+                        generation: 0,
+                        relationCategory: 'Kandung',
+                        role: 'Keluarga Baru'
+                      });
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-[#1E432F] hover:bg-[#153122] text-white text-[11px] font-bold py-2 px-3 rounded-xl transition shadow-sm"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Tambah Bebas
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Profile */}
+              <div className="bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm relative">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#1E432F]" />
+                <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Search className="h-4 w-4 text-[#1E432F]" />
+                  Cari Profil
+                </h3>
+                <input 
+                  type="text"
+                  placeholder="Nama, asal, hubungan kandung/angkat..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#F4F8F5] border border-[#D0DFD5] rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#1E432F]/20 placeholder-[#799081]"
+                />
+              </div>
+
+              {/* Members List */}
+              <div className="bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm relative max-h-[400px] overflow-y-auto">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#1E432F]" />
+                <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Users className="h-4 w-4 text-[#1E432F]" />
+                  Daftar Jiwa ({filteredNodes.length})
+                </h3>
+
+                <div className="space-y-2">
+                  {filteredNodes.length > 0 ? (
+                    filteredNodes.map((node) => (
+                      <div 
+                        key={node.id}
+                        onClick={() => {
+                          setSelectedNode(node);
+                          setIsEditing(false);
+                          setIsAddingRelation(false);
+                        }}
+                        className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-between ${
+                          selectedNode?.id === node.id 
+                            ? 'bg-[#1E432F] border-[#1E432F] text-white shadow-md' 
+                            : 'bg-white border-[#E2ECE5] hover:bg-[#F2F6F3]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full border border-[#D0DFD5] flex items-center justify-center overflow-hidden bg-white flex-shrink-0">
+                            {node.avatar ? (
+                              <img src={node.avatar} alt={node.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <RenderAvatarPlaceholder />
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold truncate max-w-[140px]">{node.name}</h4>
+                            <p className={`text-[10px] flex items-center gap-1 ${selectedNode?.id === node.id ? 'text-[#B5945B]' : 'text-[#485E50]'}`}>
+                              <span>{node.role || 'Kerabat'}</span>
+                              <span>&bull;</span>
+                              <span className="font-semibold text-[9px]">{node.relationCategory}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          selectedNode?.id === node.id ? 'bg-[#112319] text-[#B5945B]' : 'bg-[#E2ECE5] text-[#1E432F]'
+                        }`}>
+                          G{node.generation}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-stone-400 text-xs italic">
+                      Tidak ada catatan yang cocok.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Center View Area (Hierarchical Tree Visualizer Only) */}
+            <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-6">
+              
+              <div className="md:col-span-7 bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm flex flex-col justify-between min-h-[500px]">
+                <div>
+                  <div className="flex justify-between items-center mb-5 border-b pb-3 border-[#E2ECE5]">
+                    <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-[#1E432F]" />
+                      Visualisasi Silsilah Keluarga
+                    </h3>
+                  </div>
+
+                  {/* 2D HIERARCHY TREE LAYOUT */}
+                  <div className="space-y-6 my-4 pr-1 max-h-[420px] overflow-y-auto">
+                    
+                    {/* Generasi III */}
+                    {generations.greatGrandparents.length > 0 && (
+                      <div className="text-center">
+                        <span className="text-[9px] uppercase tracking-wider text-[#485E50] font-bold">Generasi III &mdash; Leluhur</span>
+                        <div className="flex flex-wrap justify-center gap-2 mt-2">
+                          {generations.greatGrandparents.map(node => (
+                            <button 
+                              key={node.id} 
+                              onClick={() => { setSelectedNode(node); setIsEditing(false); setIsAddingRelation(false); }}
+                              className={`px-3 py-1.5 rounded-xl border text-xs transition-all duration-200 ${
+                                selectedNode?.id === node.id ? 'bg-[#1E432F] text-white border-[#1E432F] shadow-md' : 'bg-[#F2F6F3] hover:bg-[#E2ECE5] text-[#1D2B22] border-[#D0DFD5]'
+                              }`}
+                            >
+                              {node.name}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="h-4 w-px bg-[#D0DFD5] mx-auto mt-2" />
+                      </div>
+                    )}
+
+                    {/* Generasi II - Kakek / Nenek */}
+                    <div>
+                      <div className="text-center">
+                        <span className="text-[9px] uppercase tracking-wider text-[#485E50] font-bold">Generasi II &mdash; Kakek & Nenek</span>
+                        <div className="flex flex-wrap justify-center gap-2 mt-2">
+                          {generations.grandparents.length > 0 ? (
+                            generations.grandparents.map(node => (
+                              <button 
+                                key={node.id} 
+                                onClick={() => { setSelectedNode(node); setIsEditing(false); setIsAddingRelation(false); }}
+                                className={`px-3 py-1.5 rounded-xl border text-xs transition-all duration-200 relative ${
+                                  selectedNode?.id === node.id 
+                                    ? 'bg-[#1E432F] text-white border-[#1E432F] ring-2 ring-[#B5945B]/50' 
+                                    : 'bg-white hover:bg-[#F2F6F3] text-[#1D2B22] border-[#D0DFD5]'
+                                  }`}
+                              >
+                                <div className="flex flex-col items-start text-left">
+                                  <span className="font-semibold">{node.name}</span>
+                                  <span className={`text-[8px] uppercase tracking-wider ${node.relationCategory === 'Angkat' ? 'text-[#B5945B]' : 'text-emerald-700'}`}>
+                                    {node.role || node.relationCategory}
+                                  </span>
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <p className="text-[10px] italic text-stone-400">Belum ada data Kakek/Nenek.</p>
+                          )}
+                        </div>
+                        <div className="h-4 w-px bg-[#D0DFD5] mx-auto mt-2" />
+                      </div>
+                    </div>
+
+                    {/* Generasi I - Orang Tua */}
+                    <div>
+                      <div className="text-center">
+                        <span className="text-[9px] uppercase tracking-wider text-[#485E50] font-bold">Generasi I &mdash; Orang Tua</span>
+                        <div className="flex flex-wrap justify-center gap-2.5 mt-2">
+                          {generations.parents.length > 0 ? (
+                            generations.parents.map(node => (
+                              <button 
+                                key={node.id} 
+                                onClick={() => { setSelectedNode(node); setIsEditing(false); setIsAddingRelation(false); }}
+                                className={`px-3.5 py-2 rounded-xl border text-xs transition-all duration-200 relative ${
+                                  selectedNode?.id === node.id 
+                                    ? 'bg-[#1E432F] text-white border-[#1E432F] ring-2 ring-[#B5945B]/50' 
+                                    : 'bg-white hover:bg-[#F2F6F3] text-[#1D2B22] border-[#D0DFD5]'
+                                }`}
+                              >
+                                <div className="flex flex-col items-start text-left">
+                                  <span className="font-semibold">{node.name}</span>
+                                  <span className={`text-[8px] uppercase tracking-wider ${node.relationCategory === 'Angkat' ? 'text-[#B5945B]' : 'text-emerald-700'}`}>
+                                    {node.role || node.relationCategory}
+                                  </span>
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                const self = familyNodes.find(n => n.id === 'g0-self');
+                                if (self) setSelectedNode(self);
+                                showToast("Pilih profil Anda terlebih dahulu untuk mendaftarkan orang tua.");
+                              }}
+                              className="text-[11px] italic text-[#1E432F] hover:text-[#112319] bg-[#E2ECE5] px-4 py-2 rounded-xl transition font-bold border border-dashed border-[#1E432F]"
+                            >
+                              + Hubungkan Orang Tua Kandung/Angkat
+                            </button>
+                          )}
+                        </div>
+                        <div className="h-4 w-px bg-[#D0DFD5] mx-auto mt-2" />
+                      </div>
+                    </div>
+
+                    {/* Generasi 0 - Anda & Saudara */}
+                    <div>
+                      <div className="text-center">
+                        <span className="text-[9px] uppercase tracking-wider text-[#485E50] font-bold">Jangkar Silsilah (Saya)</span>
+                        <div className="flex flex-wrap justify-center gap-3 mt-2">
+                          {generations.selfSiblings.length > 0 ? (
+                            generations.selfSiblings.map(node => (
+                              <button 
+                                key={node.id} 
+                                onClick={() => { setSelectedNode(node); setIsEditing(false); setIsAddingRelation(false); }}
+                                className={`px-5 py-3 rounded-xl border text-xs transition-all duration-200 shadow-md ${
+                                  selectedNode?.id === node.id 
+                                    ? 'bg-[#1E432F] text-white border-[#1E432F] font-bold scale-105' 
+                                    : 'bg-white hover:bg-[#F2F6F3] text-[#1D2B22] border-[#1E432F]/50'
+                                }`}
+                              >
+                                <span className="text-[#B5945B] mr-1">✦</span> {node.name}
+                              </button>
+                            ))
+                          ) : (
+                            <p className="text-[10px] italic text-stone-400">Data utama kosong.</p>
+                          )}
+                        </div>
+                        {generations.children.length > 0 && <div className="h-4 w-px bg-[#D0DFD5] mx-auto mt-2" />}
+                      </div>
+                    </div>
+
+                    {/* Generasi Anak-Anak */}
+                    {generations.children.length > 0 && (
+                      <div>
+                        <div className="text-center">
+                          <span className="text-[9px] uppercase tracking-wider text-[#485E50] font-bold">Generasi Anak</span>
+                          <div className="flex flex-wrap justify-center gap-2 mt-2">
+                            {generations.children.map(node => (
+                              <button 
+                                key={node.id} 
+                                onClick={() => { setSelectedNode(node); setIsEditing(false); setIsAddingRelation(false); }}
+                                className={`px-3 py-1.5 rounded-xl border text-xs transition-all duration-200 ${
+                                  selectedNode?.id === node.id ? 'bg-[#1E432F] text-white border-[#1E432F]' : 'bg-white hover:bg-[#F2F6F3] text-[#1D2B22] border-[#D0DFD5]'
+                                }`}
+                              >
+                                {node.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-[#E2ECE5] text-[10px] text-[#485E50] bg-[#F2F6F3] p-4 rounded-2xl leading-relaxed">
+                  <strong>Panduan Struktur:</strong> Gunakan bagan silsilah interaktif di atas untuk berpindah profil. Hubungkan relasi baru berstatus Kandung, Angkat, maupun Tiri secara bebas melalui panel edit sebelah kanan.
+                </div>
+              </div>
+
+              {/* Right Side Panel - Detailed Profiles & Dynamic Forms */}
+              <div className="md:col-span-5 bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm relative min-h-[500px]">
+                
+                {isEditing || isAddingRelation ? (
+                  /* ================= FORM ENTRY ANGGOTA KELUARGA GANDA ================= */
+                  <form onSubmit={handleSaveNode} className="space-y-4">
+                    <div className="border-b border-[#E2ECE5] pb-3">
+                      <h4 className="text-sm font-extrabold text-[#112319] uppercase tracking-wider">
+                        {isAddingRelation ? `Tambah ${nodeForm.role}` : `Perbarui Profil`}
+                      </h4>
+                      <p className="text-[10px] text-[#485E50]">
+                        {isAddingRelation ? `Relasi dengan: ${selectedNode?.name}` : `Dokumentasi Arsip`}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Nama Lengkap</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={nodeForm.name}
+                          onChange={(e) => setNodeForm({...nodeForm, name: e.target.value})}
+                          placeholder="Nama lengkap..."
+                          className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1E432F]/20"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Status Relasi</label>
+                          <select 
+                            value={nodeForm.relationCategory}
+                            onChange={(e) => setNodeForm({...nodeForm, relationCategory: e.target.value})}
+                            className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none text-[#1E432F] font-bold"
+                          >
+                            <option value="Kandung">Kandung (Bio)</option>
+                            <option value="Angkat">Angkat (Adoptive)</option>
+                            <option value="Tiri">Tiri (Step)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Peran / Label</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={nodeForm.role}
+                            onChange={(e) => setNodeForm({...nodeForm, role: e.target.value})}
+                            placeholder="Ayah Kandung, Ibu Angkat..."
+                            className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none text-[#112319]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Jenis Kelamin</label>
+                          <select 
+                            value={nodeForm.gender}
+                            onChange={(e) => setNodeForm({...nodeForm, gender: e.target.value})}
+                            className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none"
+                          >
+                            <option value="Laki-laki">Laki-laki</option>
+                            <option value="Perempuan">Perempuan</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Tempat Lahir</label>
+                          <input 
+                            type="text" 
+                            value={nodeForm.birthPlace}
+                            onChange={(e) => setNodeForm({...nodeForm, birthPlace: e.target.value})}
+                            placeholder="Kota Lahir..."
+                            className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Tanggal Lahir</label>
+                          <input 
+                            type="date" 
+                            value={nodeForm.birthDate}
+                            onChange={(e) => setNodeForm({...nodeForm, birthDate: e.target.value})}
+                            className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2 text-[10px] focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Tanggal Wafat</label>
+                          <input 
+                            type="date" 
+                            value={nodeForm.deathDate}
+                            onChange={(e) => setNodeForm({...nodeForm, deathDate: e.target.value})}
+                            className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2 text-[10px] focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Memoar & Kisah Ringkas</label>
+                        <textarea 
+                          rows="3"
+                          value={nodeForm.bio}
+                          onChange={(e) => setNodeForm({...nodeForm, bio: e.target.value})}
+                          placeholder="Ceritakan sejarah kehidupan, keteladanan, atau pesan luhur tokoh..."
+                          className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1E432F]/20"
+                        />
+                      </div>
+
+                      {/* Photo Uploader */}
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Foto Klasik (Unggah)</label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-[#D0DFD5] bg-[#F2F6F3] rounded-xl text-xs text-[#485E50] cursor-pointer hover:bg-[#E2ECE5] transition duration-200 w-full">
+                            <Camera className="h-4 w-4 text-[#1E432F]" />
+                            <span>{nodeForm.avatar ? "Ganti Foto" : "Unggah Gambar"}</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => handleImageChange(e, 'node')} 
+                            />
+                          </label>
+                          {nodeForm.avatar && (
+                            <img src={nodeForm.avatar} className="w-10 h-10 object-cover rounded-xl border border-[#D0DFD5]" alt="Preview" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-4 border-t border-[#E2ECE5]">
+                      <button 
+                        type="submit" 
+                        className="flex-1 bg-[#1E432F] hover:bg-[#153122] text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md"
+                      >
+                        Simpan Catatan
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => { setIsEditing(false); setIsAddingRelation(false); }}
+                        className="px-4 py-2.5 border border-[#D0DFD5] rounded-xl text-xs text-[#485E50] hover:bg-[#F2F6F3]"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </form>
+                ) : selectedNode ? (
+                  /* ================= DETAIL PROFILE CONTAINER ================= */
+                  <div className="flex flex-col h-full justify-between">
+                    <div>
+                      
+                      {/* Premium Portrait Grid with Status Banner */}
+                      <div className="bg-white p-3 border border-[#D0DFD5] shadow-lg rounded-2xl mx-auto max-w-[150px] mb-4 relative overflow-hidden group">
+                        <div className="absolute top-2 right-2 z-10">
+                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full shadow-sm text-white ${
+                            selectedNode.relationCategory === 'Angkat' ? 'bg-[#B5945B]' : 'bg-[#1E432F]'
+                          }`}>
+                            {selectedNode.relationCategory || 'Kandung'}
+                          </span>
+                        </div>
+
+                        <div className="w-full aspect-square rounded-xl bg-[#F2F6F3] flex items-center justify-center overflow-hidden border border-[#E2ECE5]">
+                          {selectedNode.avatar ? (
+                            <img src={selectedNode.avatar} alt={selectedNode.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                          ) : (
+                            <div className="text-center p-3 text-stone-400 flex flex-col items-center">
+                              <User className="h-10 w-10 text-[#43644F] opacity-50 mb-1" />
+                              <span className="text-[9px] font-bold text-[#43644F] tracking-wider uppercase">Arsip</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-center font-bold text-[9px] text-[#1E432F] bg-[#E2ECE5] py-1 rounded-full mt-2">
+                          {selectedNode.role || "Kerabat"}
+                        </div>
+                      </div>
+
+                      <div className="text-center border-b border-[#E2ECE5] pb-3 mb-3">
+                        <h3 className="text-lg font-bold text-[#112319] font-serif tracking-tight">
+                          {selectedNode.name}
+                        </h3>
+                        
+                        <div className="flex justify-center items-center gap-1.5 mt-1 text-xs text-[#485E50]">
+                          <Calendar className="h-3.5 w-3.5 text-[#1E432F]" />
+                          <span className="font-semibold text-[10px]">
+                            {selectedNode.birthDate ? new Date(selectedNode.birthDate).getFullYear() : 'Masa Lampau'}
+                          </span>
+                          <span>&mdash;</span>
+                          <span className="font-semibold text-[10px]">
+                            {selectedNode.deathDate ? new Date(selectedNode.deathDate).getFullYear() : 'Sekarang'}
+                          </span>
+                        </div>
+
+                        {selectedNode.birthPlace && (
+                          <div className="flex justify-center items-center gap-1.5 text-[9px] text-[#43644F] mt-1 font-bold">
+                            <MapPin className="h-3 w-3" />
+                            <span>{selectedNode.birthPlace}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="px-1 text-xs text-[#2A3F31] leading-relaxed text-center font-serif italic py-1">
+                        "{selectedNode.bio || 'Belum ada kisah tertulis tentang beliau. Mari tulis kisah luhur dan wasiat masa lampau sekarang.'}"
+                      </div>
+                    </div>
+
+                    {/* Quick Link Family Relations Hub */}
+                    <div className="border-t border-[#E2ECE5] pt-4 mt-4">
+                      <p className="text-[9px] uppercase tracking-wider font-bold text-[#485E50] mb-2 text-center flex items-center justify-center gap-1">
+                        <HeartHandshake className="h-3.5 w-3.5 text-[#B5945B]" />
+                        Hubungkan Kerabat Kandung / Angkat
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        {(!selectedNode.fatherId || !selectedNode.adoptiveFatherId) && (
+                          <button 
+                            type="button"
+                            onClick={() => startAddRelation('father')}
+                            className="flex items-center justify-center gap-1 text-[10px] font-bold border border-[#D0DFD5] hover:bg-[#F2F6F3] p-1.5 rounded-xl transition text-[#112319]"
+                          >
+                            <Plus className="h-3 w-3 text-[#1E432F]" /> Hubungkan Ayah
+                          </button>
+                        )}
+
+                        {(!selectedNode.motherId || !selectedNode.adoptiveMotherId) && (
+                          <button 
+                            type="button"
+                            onClick={() => startAddRelation('mother')}
+                            className="flex items-center justify-center gap-1 text-[10px] font-bold border border-[#D0DFD5] hover:bg-[#F2F6F3] p-1.5 rounded-xl transition text-[#112319]"
+                          >
+                            <Plus className="h-3 w-3 text-[#1E432F]" /> Hubungkan Ibu
+                          </button>
+                        )}
+
+                        {!selectedNode.spouseId && (
+                          <button 
+                            type="button"
+                            onClick={() => startAddRelation('spouse')}
+                            className="flex items-center justify-center gap-1 text-[10px] font-bold border border-[#D0DFD5] hover:bg-[#F2F6F3] p-1.5 rounded-xl transition text-[#112319]"
+                          >
+                            <Plus className="h-3 w-3 text-[#1E432F]" /> Pasangan
+                          </button>
+                        )}
+
+                        <button 
+                          type="button"
+                          onClick={() => startAddRelation('child')}
+                          className="flex items-center justify-center gap-1 text-[10px] font-bold border border-[#D0DFD5] hover:bg-[#F2F6F3] p-1.5 rounded-xl transition text-[#112319]"
+                        >
+                          <Plus className="h-3 w-3 text-[#1E432F]" /> Daftarkan Anak
+                        </button>
+                      </div>
+
+                      {/* Edit / Delete Row */}
+                      <div className="flex gap-2 justify-end border-t border-[#F2F6F3] pt-3">
+                        <button 
+                          type="button"
+                          onClick={() => startEditNode(selectedNode)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F2F6F3] hover:bg-[#E2ECE5] border border-[#D0DFD5] text-[#112319] rounded-xl text-[10px] font-bold transition"
+                        >
+                          <Edit className="h-3.5 w-3.5 text-[#1E432F]" /> Edit Profil
+                        </button>
+                        {selectedNode.id !== 'g0-self' && (
+                          <button 
+                            type="button"
+                            onClick={() => handleDeleteNode(selectedNode.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FDF1F1] hover:bg-[#FBE4E4] text-[#B73535] border border-[#ECD2D2] rounded-xl text-[10px] font-bold transition"
+                          >
+                            <Trash className="h-3.5 w-3.5" /> Hapus
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                    <Book className="h-12 w-12 text-[#43644F] opacity-40 mb-3" />
+                    <h4 className="text-xs font-bold text-[#112319] uppercase tracking-wider">Silakan Pilih Anggota</h4>
+                    <p className="text-[11px] text-[#485E50] max-w-xs mt-1 leading-relaxed">
+                      Pilih nama dari diagram pohon atau daftar jiwa untuk memunculkan lembar arsip foto dan sejarah kakek & nenek Anda.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ================= TAB 2: STORYBOOK JURNAL ================= */}
+        {activeTab === 'book' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* Story Entry Form */}
+            <div className="lg:col-span-5">
+              <div className="bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm relative sticky top-6">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-[#1E432F]" />
+                <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider mb-4 border-b pb-3 border-[#E2ECE5] flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-[#1E432F]" />
+                  Abadikan Kenangan Leluhur
+                </h3>
+
+                <form onSubmit={handleSaveStory} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Judul Jurnal / Peristiwa</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Contoh: Perjalanan Pertama Kakek Menyeberangi Selat..."
+                      value={storyForm.title}
+                      onChange={(e) => setStoryForm({ ...storyForm, title: e.target.value })}
+                      className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none placeholder-[#799081]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Estimasi Tanggal</label>
+                      <input 
+                        type="date" 
+                        value={storyForm.date}
+                        onChange={(e) => setStoryForm({ ...storyForm, date: e.target.value })}
+                        className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2 text-[10px] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Penulis Cerita</label>
+                      <input 
+                        type="text" 
+                        placeholder="Misal: Cucu Terbanyak"
+                        value={storyForm.author}
+                        onChange={(e) => setStoryForm({ ...storyForm, author: e.target.value })}
+                        className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2 text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Kisah Lengkap & Nilai Luhur</label>
+                    <textarea 
+                      rows="5"
+                      required
+                      placeholder="Ceritakan sejarah perjuangan masa lampau, petuah kakek, atau resep kuliner luhur warisan nenek..."
+                      value={storyForm.content}
+                      onChange={(e) => setStoryForm({ ...storyForm, content: e.target.value })}
+                      className="w-full bg-[#F2F6F3] border border-[#D0DFD5] rounded-xl p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1E432F]/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-[#112319] mb-1">Lampirkan Potret Dokumen/Foto Terkait</label>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-[#D0DFD5] bg-[#F2F6F3] rounded-xl text-xs text-[#485E50] cursor-pointer hover:bg-[#E2ECE5] transition duration-200 flex-1">
+                        <Upload className="h-4 w-4 text-[#1E432F]" />
+                        <span>{storyForm.image ? "Gambar Terlampir" : "Unggah Gambar"}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => handleImageChange(e, 'story')} 
+                        />
+                      </label>
+                      {storyForm.image && (
+                        <div className="w-12 h-12 rounded-xl border border-[#D0DFD5] overflow-hidden flex-shrink-0">
+                          <img src={storyForm.image} alt="Preview" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full bg-[#1E432F] hover:bg-[#153122] text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-all duration-300"
+                  >
+                    Rekam Jurnal Kenangan
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* List of Stories */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm">
+                <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider mb-4 border-b pb-3 border-[#E2ECE5]">
+                  Garis Waktu & Kumpulan Memoir Jurnal
+                </h3>
+
+                <div className="space-y-6">
+                  {stories.length > 0 ? (
+                    stories.map((story) => (
+                      <div 
+                        key={story.id} 
+                        className="bg-[#F2F6F3] border border-[#E2ECE5] rounded-2xl p-5 shadow-sm hover:shadow relative overflow-hidden transition-all duration-200"
+                      >
+                        <div className="absolute top-0 right-0 bg-[#1E432F] text-[#F4F8F5] text-[9px] font-bold px-3 py-1 rounded-bl-xl">
+                          {story.date}
+                        </div>
+
+                        <h4 className="text-sm font-bold text-[#112319] mb-1 max-w-[80%] font-serif">
+                          {story.title}
+                        </h4>
+
+                        <p className="text-[9px] text-[#43644F] font-bold italic mb-3 flex items-center gap-1">
+                          Ditulis oleh: {story.author || 'Kerabat'}
+                        </p>
+
+                        <div className="flex flex-col md:flex-row gap-4 mt-2">
+                          {story.image && (
+                            <div className="md:w-1/3 w-full flex-shrink-0">
+                              <img 
+                                src={story.image} 
+                                alt={story.title} 
+                                className="w-full h-auto rounded-xl border border-[#D0DFD5] max-h-[160px] object-cover" 
+                              />
+                            </div>
+                          )}
+                          <div className="text-xs text-[#2A3F31] leading-relaxed font-serif whitespace-pre-wrap flex-1">
+                            {story.content}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-16 bg-[#F2F6F3] border border-[#E2ECE5] rounded-2xl">
+                      <Book className="h-10 w-10 text-[#43644F] opacity-40 mx-auto mb-2" />
+                      <h4 className="font-bold text-[#112319] text-xs uppercase tracking-wider">Buku Masih Kosong</h4>
+                      <p className="text-xs text-[#485E50] max-w-xs mx-auto mt-1">
+                        Gunakan formulir untuk merekam kisah kenangan kakek-nenek Anda saat ini.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ================= TAB 3: RADAR GLOBAL INTERNASIONAL ================= */}
+        {activeTab === 'global' && (
+          <div className="space-y-6">
+            
+            <div className="bg-[#112319] text-[#F4F8F5] p-8 rounded-2xl border border-[#D0DFD5] shadow-lg relative overflow-hidden">
+              <div className="relative z-10 max-w-3xl">
+                <span className="text-[9px] bg-[#B5945B] text-white font-bold px-2.5 py-1 rounded-full tracking-widest uppercase">
+                  Ide Global Tingkat Lanjut (Global Matching)
+                </span>
+                <h2 className="text-2xl font-bold mt-3 text-white font-serif">
+                  Hubungkan Sejarah Migrasi Silsilah Lintas Negara
+                </h2>
+                <p className="text-xs text-[#CFE2D6] leading-relaxed mt-2">
+                  Terobosan Livro da Família untuk masa depan bertujuan membantu Anda menghubungkan silsilah keluarga secara cerdas dengan arsip migrasi internasional (seperti hubungan sejarah klan Timor-Leste dengan arsip kolonial di Lisbon Portugal atau sejarah migrasi kekerabatan kakek klan Jawa Anda dengan kerabat jauh di Suriname dan Belanda).
+                </p>
+                <div className="flex flex-wrap gap-3 mt-4">
+                  <div className="flex items-center gap-1.5 bg-[#1E432F] px-3 py-1.5 rounded-lg text-[10px] font-bold">
+                    <Globe className="h-3.5 w-3.5 text-[#B5945B]" />
+                    <span>Sejarah Lintas Benua</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-[#1E432F] px-3 py-1.5 rounded-lg text-[10px] font-bold">
+                    <Fingerprint className="h-3.5 w-3.5 text-[#B5945B]" />
+                    <span>Algoritma Kecocokan Marga</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* Radar Simulation */}
+              <div className="lg:col-span-4 bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Compass className="h-4 w-4 text-[#1E432F] animate-spin" style={{ animationDuration: '6s' }} />
+                    Radar Pemindaian Aktif
+                  </h3>
+                  <p className="text-xs text-[#485E50] mb-4">
+                    Sistem sedang memindai keterkaitan nama keluarga / marga di jaringan data global:
+                  </p>
+                  
+                  {/* Glowing Radar Mesh Grid */}
+                  <div className="relative aspect-square w-full max-w-[220px] mx-auto bg-[#112319] rounded-full border-4 border-[#1E432F] flex items-center justify-center overflow-hidden mb-4 shadow-inner">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(45,90,67,0.35)_0%,rgba(0,0,0,0.85)_85%)]" />
+                    <div className="absolute top-1/2 left-1/2 w-full h-[1px] bg-[#B5945B] origin-left -translate-y-1/2 -translate-x-1/2 rotate-45 animate-spin" style={{ animationDuration: '3.5s' }} />
+                    
+                    <span className="absolute top-12 right-14 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#B5945B] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#B5945B]"></span>
+                    </span>
+                    <span className="absolute bottom-16 left-12 flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                    </span>
+
+                    <div className="z-10 text-center">
+                      <Globe className="h-8 w-8 text-[#B5945B] mx-auto opacity-80" />
+                      <span className="text-[9px] font-mono font-bold text-[#B5945B] bg-black/50 px-2.5 py-1 rounded-full block mt-2">
+                        MEMINDAI DATA...
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#E2ECE5] rounded-xl text-[10px] text-[#43644F] italic border-l-2 border-[#1E432F] leading-relaxed">
+                  "Mencocokkan nama kakek angkat dengan arsip imigrasi nasional Portugal dan Timor-Leste secara cerdas."
+                </div>
+              </div>
+
+              {/* Match list */}
+              <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-[#D0DFD5] shadow-sm">
+                <div className="flex justify-between items-center mb-4 border-b pb-3 border-[#E2ECE5]">
+                  <h3 className="text-xs font-extrabold text-[#112319] uppercase tracking-wider">
+                    Hasil Deteksi Silsilah Internasional
+                  </h3>
+                  <span className="text-[10px] bg-[#E2ECE5] text-[#1E432F] px-2.5 py-1 rounded-full font-bold">
+                    2 Deteksi Aktif
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {simulatedMatches.map((match) => (
+                    <div 
+                      key={match.id} 
+                      className="bg-[#F2F6F3] border border-[#E2ECE5] rounded-2xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition-all duration-200"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#1E432F] bg-[#E2ECE5] px-2 py-0.5 rounded-full">{match.code}</span>
+                          <span className="text-[10px] font-bold text-[#43644F] uppercase tracking-wider">{match.country}</span>
+                          <span className="text-[9px] bg-[#B5945B] text-white px-2 py-0.5 rounded-full font-bold">
+                            {match.matchPercentage}% Kemiripan
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-[#112319] font-serif">
+                          {match.familyBranch}
+                        </h4>
+                        <p className="text-xs text-[#485E50]">
+                          Leluhur Identik: <span className="font-bold text-[#1E432F]">{match.ancestorName}</span>
+                        </p>
+                        <p className="text-xs text-[#485E50] leading-relaxed max-w-xl">
+                          {match.description}
+                        </p>
+                      </div>
+
+                      <div className="flex-shrink-0 w-full md:w-auto">
+                        {match.status === 'Terhubung' ? (
+                          <div className="flex items-center justify-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-bold">
+                            <Check className="h-3.5 w-3.5" /> Terhubung
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={match.status === 'Menghubungkan...'}
+                            onClick={() => connectGlobalMatch(match.id, match.familyBranch)}
+                            className="w-full flex items-center justify-center gap-1.5 bg-[#1E432F] hover:bg-[#153122] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow animate-pulse"
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
+                            {match.status}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 p-4 bg-[#E2ECE5] rounded-2xl border border-dashed border-[#D0DFD5] text-xs text-[#43644F]">
+                  <h5 className="font-bold text-[#112319] mb-1">💡 Bagaimana konsep pencocokan global masa depan ini bekerja?</h5>
+                  Jika di kemudian hari sistem mendeteksi kesamaan marga atau catatan arsip migrasi klan Anda di luar negeri, aplikasi akan memberikan usulan integrasi silsilah lintas negara untuk memperluas pohon keluarga besar Anda berdasarkan kesepakatan bersama.
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-[#D0DFD5] mt-16 py-10 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 text-center text-[#485E50] space-y-3 relative z-10">
+          <p className="italic text-xs font-medium max-w-lg mx-auto leading-relaxed">
+            "Sebab ingatan bukan hanya tentang masa lalu, melainkan menaruh fondasi yang teduh bagi anak cucu kita agar mengerti dari mana mereka berasal."
+          </p>
+          <div className="flex justify-center gap-4 text-[10px] font-bold text-[#1E432F] pt-2">
+            <span>&copy; 2026 Livro da Família - Memórias Eternas</span>
+            <span>&bull;</span>
+            <span>Penyimpanan Lokal Aktif</span>
+          </div>
+        </div>
+      </footer>
+
+    </div>
+  );
+}
